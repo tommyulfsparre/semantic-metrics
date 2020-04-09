@@ -36,6 +36,8 @@ import com.spotify.metrics.core.DerivingMeter;
 import com.spotify.metrics.core.MetricId;
 import com.spotify.metrics.core.SemanticMetricFilter;
 import com.spotify.metrics.core.SemanticMetricRegistry;
+import com.spotify.metrics.tags.Decorator;
+import com.spotify.metrics.tags.NoopDecorator;
 import com.spotify.metrics.tags.NoopTagExtractor;
 import com.spotify.metrics.tags.TagExtractor;
 import java.io.IOException;
@@ -86,6 +88,7 @@ public class FastForwardHttpReporter implements AutoCloseable {
     private final Set<Percentile> histogramPercentiles;
     private final Clock clock;
     private final TagExtractor tagExtractor;
+    private final Decorator decorator;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -94,13 +97,13 @@ public class FastForwardHttpReporter implements AutoCloseable {
         HttpClient client, Set<Percentile> histogramPercentiles, Clock clock
     ) {
         this(registry, prefix, unit, duration, client, histogramPercentiles, clock,
-            new NoopTagExtractor());
+            new NoopTagExtractor(), new NoopDecorator());
     }
 
     private FastForwardHttpReporter(
         SemanticMetricRegistry registry, MetricId prefix, TimeUnit unit, long duration,
         HttpClient client, Set<Percentile> histogramPercentiles, Clock clock,
-        TagExtractor tagExtractor
+        TagExtractor tagExtractor, Decorator decorator
     ) {
         this.registry = registry;
         this.prefix = prefix;
@@ -110,6 +113,7 @@ public class FastForwardHttpReporter implements AutoCloseable {
         this.histogramPercentiles = new HashSet<>(histogramPercentiles);
         this.clock = clock;
         this.tagExtractor = tagExtractor;
+        this.decorator = decorator;
     }
 
     public static Builder forRegistry(SemanticMetricRegistry registry, HttpClient client) {
@@ -124,6 +128,7 @@ public class FastForwardHttpReporter implements AutoCloseable {
         private MetricId prefix = MetricId.build();
         private Clock clock;
         private TagExtractor tagExtractor;
+        private Decorator decorator;
 
         private Set<Percentile> histogramPercentiles =
             Sets.newHashSet(new Percentile(0.75), new Percentile(0.99));
@@ -195,10 +200,21 @@ public class FastForwardHttpReporter implements AutoCloseable {
         /**
          * TagExtractor implementation that will be used in the reporter.
          *
+         * @deprecated use {@link #withDecorator(com.spotify.metrics.tags.Decorator)} instead.
          * @return this builder
          */
         public Builder tagExtractor(TagExtractor tagExtractor) {
             this.tagExtractor = tagExtractor;
+            return this;
+        }
+
+        /**
+         * Decorator implementation that will be used in the reporter.
+         *
+         * @return this builder
+         */
+        public Builder withDecorator(Decorator decorator) {
+            this.decorator = decorator;
             return this;
         }
 
@@ -211,9 +227,11 @@ public class FastForwardHttpReporter implements AutoCloseable {
 
             final TagExtractor tagExtractor =
                 this.tagExtractor != null ? this.tagExtractor : new NoopTagExtractor();
+            final Decorator decorator =
+                this.decorator != null ? this.decorator : new NoopDecorator();
 
             return new FastForwardHttpReporter(registry, prefix, unit, time, client,
-                histogramPercentiles, clock, tagExtractor);
+                histogramPercentiles, clock, tagExtractor, decorator);
         }
     }
 
@@ -258,8 +276,11 @@ public class FastForwardHttpReporter implements AutoCloseable {
             reportDerivingMeter(builder, entry.getValue());
         }
 
-        final Map<String, String> commonTags = tagExtractor.addTags(prefix.getTags());
-        final Batch batch = new Batch(commonTags, Collections.emptyMap(), points);
+        final Map<String, String> commonTags =
+            decorator.withTags(tagExtractor.addTags(prefix.getTags()));
+        final Map<String, String> commonResources =
+            decorator.withResources(Collections.emptyMap());
+        final Batch batch = new Batch(commonTags, commonResources, points);
 
         client.sendBatch(batch).toCompletable().await();
     }

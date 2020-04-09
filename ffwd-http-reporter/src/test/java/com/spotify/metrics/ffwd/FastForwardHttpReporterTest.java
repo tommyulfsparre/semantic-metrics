@@ -1,7 +1,9 @@
 package com.spotify.metrics.ffwd;
 
 import static com.google.common.collect.ImmutableMap.of;
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.timeout;
@@ -18,6 +20,7 @@ import com.spotify.metrics.core.MetricId;
 import com.spotify.metrics.core.SemanticMetricRegistry;
 import com.spotify.metrics.ffwdhttp.Clock;
 import com.spotify.metrics.ffwdhttp.FastForwardHttpReporter;
+import com.spotify.metrics.tags.CommonEnvironmentDecorator;
 import com.spotify.metrics.tags.EnvironmentTagExtractor;
 import java.util.Collections;
 import java.util.HashSet;
@@ -181,5 +184,70 @@ public class FastForwardHttpReporterTest {
 
         final Map<String, String> commonTags = batch.getValue().getCommonTags();
         assertEquals(ImmutableMap.of("foo", "bar", "bar", "baz"), commonTags);
+    }
+
+    @Test
+    public void shouldDecorateMetricsWithTagsAndResources() throws Exception {
+        final Map<String, String> envs =
+            ImmutableMap.of("FFWD_TAG_bar", "baz", "FFWD_RESOURCES_qux", "quux");
+
+        final Supplier<Map<String, String>> environmentSupplier =
+            Suppliers.ofInstance(envs);
+
+        reporter = FastForwardHttpReporter
+            .forRegistry(registry, httpClient)
+            .schedule(REPORTING_PERIOD, TimeUnit.MILLISECONDS)
+            .prefix(MetricId.build("prefix").tagged(commonTags))
+            .clock(fixedClock)
+            .withDecorator(new CommonEnvironmentDecorator(environmentSupplier))
+            .build();
+
+        doReturn(Observable.<Void>just(null)).when(httpClient).sendBatch(any(Batch.class));
+        fixedClock.setCurrentTime(TIME);
+
+        reporter.start();
+
+        final ArgumentCaptor<Batch> batch = ArgumentCaptor.forClass(Batch.class);
+
+        verify(httpClient, timeout(REPORTING_PERIOD * 2 + 20).atLeastOnce()).sendBatch(
+            batch.capture());
+
+        final Map<String, String> commonTags = batch.getValue().getCommonTags();
+        final Map<String, String> commonResources = batch.getValue().getCommonResource();
+        assertThat(commonTags, is(ImmutableMap.of("foo", "bar", "bar", "baz")));
+        assertThat(commonResources, is(ImmutableMap.of("qux", "quux")));
+    }
+
+    @Test
+    public void shouldSupportBothDecoratorAndTagExtractor() throws Exception {
+        final Map<String, String> envs =
+            ImmutableMap.of("FFWD_TAG_bar", "baz", "FFWD_RESOURCES_qux", "quux");
+
+        final Supplier<Map<String, String>> environmentSupplier =
+            Suppliers.ofInstance(envs);
+
+        reporter = FastForwardHttpReporter
+            .forRegistry(registry, httpClient)
+            .schedule(REPORTING_PERIOD, TimeUnit.MILLISECONDS)
+            .prefix(MetricId.build("prefix").tagged(commonTags))
+            .clock(fixedClock)
+            .withDecorator(new CommonEnvironmentDecorator(environmentSupplier))
+            .tagExtractor(new EnvironmentTagExtractor(environmentSupplier))
+            .build();
+
+        doReturn(Observable.<Void>just(null)).when(httpClient).sendBatch(any(Batch.class));
+        fixedClock.setCurrentTime(TIME);
+
+        reporter.start();
+
+        final ArgumentCaptor<Batch> batch = ArgumentCaptor.forClass(Batch.class);
+
+        verify(httpClient, timeout(REPORTING_PERIOD * 2 + 20).atLeastOnce()).sendBatch(
+            batch.capture());
+
+        final Map<String, String> commonTags = batch.getValue().getCommonTags();
+        final Map<String, String> commonResources = batch.getValue().getCommonResource();
+        assertThat(commonTags, is(ImmutableMap.of("foo", "bar", "bar", "baz")));
+        assertThat(commonResources, is(ImmutableMap.of("qux", "quux")));
     }
 }
