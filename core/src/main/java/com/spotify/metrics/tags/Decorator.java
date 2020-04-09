@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Spotify AB.
+ * Copyright (c) 2020 Spotify AB.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -24,14 +24,23 @@ package com.spotify.metrics.tags;
 import java.util.Map;
 
 /**
- * Extract tags to be added to and enrich a metric.
+ * Decorates metrics with additional tags and resource identifiers.
  */
-public interface TagExtractor {
+public interface Decorator {
 
     /**
-     * Creates a new map with the extracted tags from the supplied map.
+     * Creates and returns a new map with extracted tags added.
      *
-     * @return map with extracted tags added.
+     * @param tags map with existing tags
+     * @return map with extracted tags added
      */
-    Map<String, String> addTags(Map<String, String> tags);
+    Map<String, String> withTags(Map<String, String> tags);
+
+    /**
+     * Creates and returns a new map with extracted resource identifiers added.
+     *
+     * @param resources map with existing resources identifiers.
+     * @return map with extracted resources identifiers added.
+     */
+    Map<String, String> withResources(Map<String, String> resources);
 }

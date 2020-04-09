@@ -29,7 +29,7 @@ public class EnvironmentTagExtractorTest {
             Suppliers.ofInstance(tags);
 
         final EnvironmentTagExtractor environmentTagExtractor =
-            new EnvironmentTagExtractor(environmentSupplier);
+            new EnvironmentTagExtractor(environmentSupplier::get);
 
         final Map<String, String> currentMap = ImmutableMap.of("cluster", "cluster1");
 

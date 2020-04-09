@@ -21,36 +21,69 @@
 
 package com.spotify.metrics.tags;
 
-import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Extract tags from the system environment variables.
- *
  */
 public class EnvironmentTagExtractor implements TagExtractor {
 
     /**
-     * Prefix of environment variable that adds additional tags.
+     * Environment variable name prefix for extracting additional tags.
      */
-    public static final String FFWD_TAG_PREFIX = "FFWD_TAG_";
+    public static final String DEFAULT_FFWD_TAG_PREFIX = "FFWD_TAG_";
 
-    public static Map<String, String> environmentTags;
+    private final Map<String, String> environmentTags;
 
     public EnvironmentTagExtractor() {
-        this(Suppliers.ofInstance(System.getenv()));
+        this(DEFAULT_FFWD_TAG_PREFIX, Suppliers.ofInstance(System.getenv())::get);
     }
 
-    public EnvironmentTagExtractor(Supplier<Map<String, String>> enviromentSupplier) {
-        this.environmentTags = filterEnvironmentTags(enviromentSupplier.get());
+    public EnvironmentTagExtractor(final Supplier<Map<String, String>> environmentSupplier) {
+        this.environmentTags =
+            filterEnvironmentTags(DEFAULT_FFWD_TAG_PREFIX, environmentSupplier.get());
+    }
+
+    public EnvironmentTagExtractor(final String prefix,
+                                   final Supplier<Map<String, String>> environmentSupplier
+    ) {
+        this.environmentTags = filterEnvironmentTags(prefix, environmentSupplier.get());
     }
 
     /**
-     * Extract tags from the system environment variables.
-     * Tags extracted from the environment takes precedence and overwrites existing tags
-     * with the same key.
+     * Extract tags from the supplied map for keys that prefix matches {@value #DEFAULT_FFWD_TAG_PREFIX}.
+     *
+     * @return map with extracted tags.
+     */
+    public static Map<String, String> filterEnvironmentTags(final Map<String, String> env) {
+        return filterEnvironmentTags(DEFAULT_FFWD_TAG_PREFIX, env);
+    }
+
+    /**
+     * Extract tags from the supplied map for keys that matches @param prefix.
+     *
+     * @return map with extracted tags.
+     */
+    public static Map<String, String> filterEnvironmentTags(final String prefix,
+                                                            final Map<String, String> env) {
+        final Map<String, String> tags = new HashMap<>();
+
+        for (final Map.Entry<String, String> e : env.entrySet()) {
+            if (e.getKey().startsWith(prefix)) {
+                final String tag = e.getKey().substring(prefix.length());
+                tags.put(tag.toLowerCase(), e.getValue());
+            }
+        }
+
+        return tags;
+    }
+
+    /**
+     * Extract tags from the system environment variables. Tags extracted from the environment takes
+     * precedence and overwrites existing tags with the same key.
      *
      * @return map with extracted tags added.
      */
@@ -59,23 +92,5 @@ public class EnvironmentTagExtractor implements TagExtractor {
         final Map<String, String> extractedTags = new HashMap<>(tags);
         extractedTags.putAll(environmentTags);
         return extractedTags;
-    }
-
-    /**
-     * Extract tags from a map that can correspond to system environment variables.
-     *
-     * @return extracted tags.
-     */
-    public static Map<String, String> filterEnvironmentTags(final Map<String, String> env) {
-        final Map<String, String> tags = new HashMap<>();
-
-        for (final Map.Entry<String, String> e : env.entrySet()) {
-            if (e.getKey().startsWith(FFWD_TAG_PREFIX)) {
-                final String tag = e.getKey().substring(FFWD_TAG_PREFIX.length());
-                tags.put(tag.toLowerCase(), e.getValue());
-            }
-        }
-
-        return tags;
     }
 }
