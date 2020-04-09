@@ -40,6 +40,7 @@ import com.spotify.metrics.tags.NoopTagExtractor;
 import com.spotify.metrics.tags.TagExtractor;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -258,7 +259,7 @@ public class FastForwardHttpReporter implements AutoCloseable {
         }
 
         final Map<String, String> commonTags = tagExtractor.addTags(prefix.getTags());
-        final Batch batch = new Batch(commonTags, points);
+        final Batch batch = new Batch(commonTags, Collections.emptyMap(), points);
 
         client.sendBatch(batch).toCompletable().await();
     }
@@ -401,6 +402,8 @@ public class FastForwardHttpReporter implements AutoCloseable {
     }
 
     private static class BatchBuilder {
+        private final static Map<String, String> resources = Collections.emptyMap();
+
         private final List<Batch.Point> points;
         private final long timestamp;
         private final String key;
@@ -433,7 +436,7 @@ public class FastForwardHttpReporter implements AutoCloseable {
         }
 
         public void buildPoint(final String stat, final double value) {
-            points.add(new Batch.Point(key, statsMap(stat), value, timestamp));
+            points.add(new Batch.Point(key, statsMap(stat), resources, value, timestamp));
         }
 
         private Map<String, String> statsMap(
